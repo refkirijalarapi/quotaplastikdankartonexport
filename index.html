@@ -1,0 +1,208 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stok Karton dan Plastik Export</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; background-color: #f4f7f9; color: #333; }
+        .container { max-width: 900px; margin: 20px auto; padding: 0 15px; }
+        .header { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        .flex-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+        .controls { display: flex; gap: 10px; align-items: center; margin-top: 15px; background: #f8f9fa; padding: 10px; border-radius: 8px; }
+        select { padding: 8px; border-radius: 5px; border: 1px solid #1a73e8; font-weight: bold; color: #1a73e8; outline: none; cursor: pointer; }
+        table { width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        th { background: #1a73e8; color: white; padding: 18px; text-align: left; }
+        td { padding: 15px; border-bottom: 1px solid #eee; }
+        tr:hover { background: #f8faff; cursor: pointer; }
+        .hidden { display: none; }
+        .detail-card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+        .qty-display { background: #e8f0fe; padding: 20px; border-radius: 10px; text-align: center; margin-bottom: 25px; }
+        .qty-val { font-size: 3em; font-weight: 800; color: #1a73e8; }
+        button { padding: 10px 18px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
+        .btn-reduce { background: #d93025; color: white; width: 100%; font-size: 1.1em; }
+        .btn-action { background: #34a853; color: white; font-size: 0.8em; }
+        .history-item { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f1f1f1; font-size: 0.85em; }
+        input[type="number"] { padding: 12px; width: 80px; border: 2px solid #ddd; border-radius: 8px; font-size: 1em; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="main-page">
+        <div class="header">
+            <div class="flex-header">
+                <h1 style="margin:0; font-size: 1.5em;">Quota Karton Dan Plastik
+                Export P1</h1>
+                <div>
+                    <button class="btn-action" onclick="downloadData()">Download JSON</button>
+                    <button class="btn-action" style="background:#5f6368" onclick="document.getElementById('fileInput').click()">Upload JSON</button>
+                    <input type="file" id="fileInput" class="hidden" accept=".json" onchange="importData(event)">
+                </div>
+            </div>
+            <div class="controls">
+                <span>Pilih Periode:</span>
+                <select id="select-bulan" onchange="gantiBulan()"></select>
+                <select id="select-tahun" onchange="gantiBulan()"></select>
+            </div>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Nama Produk</th>
+                    <th>Quota Sisa (pcs)</th>
+                </tr>
+            </thead>
+            <tbody id="table-body"></tbody>
+        </table>
+    </div>
+
+    <div id="detail-page" class="hidden">
+        <button onclick="showMain()" style="background:none; color:#1a73e8; padding:0; margin-bottom:20px; cursor:pointer; font-weight:bold;">← Kembali ke Daftar</button>
+        <div class="detail-card">
+            <h2 id="prod-name" style="margin-top:0"></h2>
+            <p id="detail-periode-label" style="color: #666; font-size: 0.9em;"></p>
+            <div class="qty-display">
+                <span>Total Stok Tersedia</span>
+                <div id="prod-qty" class="qty-val"></div>
+            </div>
+            <div style="display:flex; gap:10px; margin-bottom:30px;">
+                <input type="number" id="input-kurang" value="1" min="1">
+                <button class="btn-reduce" onclick="eksekusiKurang()">KURANGI QUANTITY</button>
+            </div>
+            <h3>Riwayat Penggunaan (Bulan Ini)</h3>
+            <div id="hist-list"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // List produk dengan perbaikan nama 1 inch
+    const productList = [
+        "SP-121-0D 360×550×80", "SP-124-0D 1020×360×160", "EE-SP118 950×520×240", "EE-SP106", 
+        "STOPPER 330×340×100", "KARTON BOX 830×350×80", "PLASTIK LDPE 30×130×0,04", 
+        "PLASTIK BELEK 1500×1000×0,04", "PLASTIK ANTIRUST 1000×1000×0,07", "PLASTIK ANTIRUST 500×700×0,07", 
+        "KERTAS ANTI RUST 340×540", "LAKBAN KERTAS OKAMOTO", "LAKBAN GOLDTAPE", "MASKING TAPE 1 inch", "LEM O'GLUE 50cc"
+    ];
+
+    const months = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+    const selBulan = document.getElementById('select-bulan');
+    const selTahun = document.getElementById('select-tahun');
+    const now = new Date();
+
+    // Isi Dropdown Bulan & Tahun
+    months.forEach((m, i) => {
+        let opt = new Option(m, m);
+        if(i === now.getMonth()) opt.selected = true;
+        selBulan.add(opt);
+    });
+
+    for(let i = 2025; i <= 2030; i++) {
+        let opt = new Option(i, i);
+        if(i === now.getFullYear()) opt.selected = true;
+        selTahun.add(opt);
+    }
+
+    let db = JSON.parse(localStorage.getItem('stock_db_final')) || {};
+    let currentKey = "";
+
+    function gantiBulan() {
+        currentKey = `${selBulan.value}-${selTahun.value}`;
+        // Jika data bulan terpilih belum ada, buat baru
+        if (!db[currentKey]) {
+            db[currentKey] = {};
+            productList.forEach(p => db[currentKey][p] = { qty: 1000, logs: [] });
+            save();
+        }
+        render();
+    }
+
+    function save() { localStorage.setItem('stock_db_final', JSON.stringify(db)); }
+
+    function render() {
+        const body = document.getElementById('table-body');
+        body.innerHTML = "";
+        const data = db[currentKey];
+        
+        Object.keys(data).forEach(name => {
+            const row = document.createElement('tr');
+            // Menggunakan event listener agar karakter khusus seperti ' di LEM O'GLUE aman
+            row.addEventListener('click', () => showDetail(name));
+            row.innerHTML = `<td>${name}</td><td><strong>${data[name].qty}</strong></td>`;
+            body.appendChild(row);
+        });
+    }
+
+    let activeP = "";
+    function showDetail(n) {
+        activeP = n;
+        document.getElementById('main-page').classList.add('hidden');
+        document.getElementById('detail-page').classList.remove('hidden');
+        document.getElementById('prod-name').innerText = n;
+        document.getElementById('detail-periode-label').innerText = "Periode Aktif: " + currentKey;
+        updateDetail();
+    }
+
+    function showMain() {
+        document.getElementById('main-page').classList.remove('hidden');
+        document.getElementById('detail-page').classList.add('hidden');
+        render();
+    }
+
+    function updateDetail() {
+        const p = db[currentKey][activeP];
+        document.getElementById('prod-qty').innerText = p.qty;
+        const list = document.getElementById('hist-list');
+        list.innerHTML = p.logs.length ? "" : "<p style='color:#999'>Belum ada transaksi di periode ini.</p>";
+        
+        // Menampilkan riwayat dari yang terbaru di atas
+        p.logs.slice().reverse().forEach(l => {
+            list.innerHTML += `
+                <div class="history-item">
+                    <span>[-] Dikurangi <b>${l.a} pcs</b></span>
+                    <span style="color:#888">${l.t}</span>
+                </div>`;
+        });
+    }
+
+    function eksekusiKurang() {
+        const input = document.getElementById('input-kurang');
+        const val = parseInt(input.value);
+        if (val > 0 && db[currentKey][activeP].qty >= val) {
+            db[currentKey][activeP].qty -= val;
+            // Catat waktu lokal Indonesia
+            const timeStr = new Date().toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
+            db[currentKey][activeP].logs.push({ a: val, t: timeStr });
+            save(); 
+            updateDetail();
+            input.value = 1;
+        } else {
+            alert("Jumlah tidak valid atau stok tidak cukup!");
+        }
+    }
+
+    function downloadData() {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db, null, 2));
+        const a = document.createElement('a');
+        a.href = dataStr; a.download = `backup_stok_lengkap.json`;
+        a.click();
+    }
+
+    function importData(event) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                db = JSON.parse(e.target.result);
+                save(); gantiBulan();
+                alert("Database berhasil diperbarui dari file!");
+            } catch (err) { alert("Gagal! File JSON tidak valid."); }
+        };
+        reader.readAsText(event.target.files[0]);
+    }
+
+    // Jalankan inisialisasi awal
+    gantiBulan();
+</script>
+</body>
+</html>
